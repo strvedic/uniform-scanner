@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Uniform Scanner</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { 
+    font-family: 'Segoe UI', sans-serif; 
+    background: #0f172a; color: #e2e8f0; 
+    min-height: 100vh; overflow-x: hidden;
+  }
+  .header { 
+    background: linear-gradient(135deg, #1e40af, #1e3a8a); 
+    padding: 16px 20px; text-align: center;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  }
+  .header h1 { font-size: 20px; font-weight: 800; letter-spacing: 0.5px; }
+  .header p  { font-size: 12px; opacity: 0.7; margin-top: 3px; }
+
+  .stats { display: flex; gap: 8px; padding: 14px; }
+  .stat { 
+    flex: 1; background: #1e293b; border-radius: 14px; 
+    padding: 14px 8px; text-align: center;
+    border: 1px solid #334155;
+  }
+  .stat .num { font-size: 30px; font-weight: 900; line-height: 1; }
+  .stat .lbl { font-size: 10px; opacity: 0.5; margin-top: 4px; text-transform: uppercase; letter-spacing: 1px; }
+  .blue .num  { color: #60a5fa; }
+  .green .num { color: #4ade80; }
+  .amber .num { color: #fbbf24; }
+
+  /* Scanner area */
+  .scanner-wrap {
+    margin: 0 14px;
+    border-radius: 20px;
+    overflow: hidden;
+    position: relative;
+    background: #000;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  }
+  #preview {
+    width: 100%;
+    display: block;
+    max-height: 65vw;
+    object-fit: cover;
+  }
+  .scan-overlay {
+    position: absolute; inset: 0;
+    pointer-events: none;
+  }
+  /* Corner brackets */
+  .corner { position: absolute; width: 40px; height: 40px; border-color: #4ade80; border-style: solid; }
+  .tl { top: 12px; left: 12px;  border-width: 3px 0 0 3px; border-radius: 6px 0 0 0; }
+  .tr { top: 12px; right: 12px; border-width: 3px 3px 0 0; border-radius: 0 6px 0 0; }
+  .bl { bottom: 12px; left: 12px;  border-width: 0 0 3px 3px; border-radius: 0 0 0 6px; }
+  .br { bottom: 12px; right: 12px; border-width: 0 3px 3px 0; border-radius: 0 0 6px 0; }
+  .scan-line {
+    position: absolute; left: 10%; right: 10%; height: 2px;
+    background: linear-gradient(90deg, transparent, #4ade80, transparent);
+    box-shadow: 0 0 10px #4ade80, 0 0 20px #4ade8066;
+    animation: scanMove 2s ease-in-out infinite;
+  }
+  @keyframes scanMove { 0%,100% { top: 20%; } 50% { top: 80%; } }
+
+  /* Status pill */
+  .status-pill {
+    margin: 12px 14px 0;
+    background: #1e293b;
+    border-radius: 50px;
+    padding: 10px 20px;
+    text-align: center;
+    font-size: 14px;
+    color: #64748b;
+    border: 1px solid #334155;
+    transition: all 0.3s;
+  }
+  .status-pill.scanning { color: #4ade80; border-color: #4ade8044; background: #14532d22; }
+  .status-pill.error    { color: #f87171; border-color: #f8717144; background: #7f1d1d22; }
+
+  /* Buttons */
+  .btn-row { display: flex; gap: 8px; padding: 10px 14px 0; }
+  .btn {
+    flex: 1; padding: 14px 8px; border-radius: 12px; border: none;
+    font-size: 15px; font-weight: 700; cursor: pointer;
+    transition: transform 0.1s, opacity 0.1s;
+  }
+  .btn:active { transform: scale(0.96); opacity: 0.85; }
+  .btn-green { background: #16a34a; color: #fff; }
+  .btn-red   { background: #dc2626; color: #fff; }
+  .btn-full  { flex: none; width: calc(100% - 28px); margin: 0 14px; }
+
+  /* Result card */
+  .result-card {
+    margin: 12px 14px 0;
+    padding: 18px; border-radius: 16px;
+    text-align: center; font-size: 17px; font-weight: 700;
+    display: none; line-height: 1.7;
+    animation: popIn 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  @keyframes popIn { from { transform: scale(0.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .result-card.success  { background: #14532d; color: #4ade80; display: block; border: 1px solid #16a34a55; }
+  .result-card.already  { background: #713f12; color: #fbbf24; display: block; border: 1px solid #d9770655; }
+  .result-card.notfound { background: #7f1d1d; color: #f87171; display: block; border: 1px solid #dc262655; }
+  .result-card.loading  { background: #1e293b;  color: #94a3b8; display: block; }
+
+  /* Divider */
+  .divider {
+    text-align: center; color: #334155; font-size: 12px;
+    margin: 16px 14px 12px; position: relative;
+    font-weight: 700; letter-spacing: 2px;
+  }
+  .divider::before, .divider::after {
+    content: ''; position: absolute; top: 50%;
+    width: 35%; height: 1px; background: #1e293b;
+  }
+  .divider::before { left: 0; } .divider::after { right: 0; }
+
+  /* Manual input */
+  .manual-wrap { padding: 0 14px; }
+  .manual-input {
+    width: 100%; padding: 18px; border-radius: 14px;
+    background: #1e293b; border: 2px solid #334155;
+    color: #e2e8f0; font-size: 22px; text-align: center;
+    letter-spacing: 3px; margin-bottom: 10px;
+    transition: border-color 0.2s;
+  }
+  .manual-input:focus { outline: none; border-color: #3b82f6; }
+  .manual-input.shake { animation: shake 0.4s ease; border-color: #dc2626 !important; }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+
+  /* History */
+  .history { padding: 0 14px; margin-top: 20px; padding-bottom: 30px; }
+  .hist-title { font-size: 11px; color: #475569; margin-bottom: 10px; font-weight: 700; letter-spacing: 2px; }
+  .hist-item {
+    background: #1e293b; border-radius: 12px; padding: 12px 14px;
+    margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;
+    border: 1px solid #334155;
+  }
+  .hist-adm  { font-size: 16px; font-weight: 800; }
+  .hist-meta { font-size: 11px; color: #64748b; margin-top: 3px; }
+  .badge { font-size: 11px; padding: 5px 12px; border-radius: 50px; font-weight: 800; white-space: nowrap; }
+  .b-ok  { background: #14532d; color: #4ade80; }
+  .b-dup { background: #713f12; color: #fbbf24; }
+  .b-err { background: #7f1d1d; color: #f87171; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🎽 Uniform Distribution</h1>
+  <p>Sairam Vidyalaya · Live Scanner</p>
+</div>
+
+<div class="stats">
+  <div class="stat blue"><div class="num" id="s-total">-</div><div class="lbl">Total</div></div>
+  <div class="stat green"><div class="num" id="s-dist">-</div><div class="lbl">Done</div></div>
+  <div class="stat amber"><div class="num" id="s-pend">-</div><div class="lbl">Pending</div></div>
+</div>
+
+<!-- Live scanner -->
+<div style="padding: 14px 14px 0;">
+  <div class="scanner-wrap" id="scanner-wrap">
+    <video id="preview" autoplay muted playsinline></video>
+    <div class="scan-overlay" id="overlay" style="display:none">
+      <div class="corner tl"></div><div class="corner tr"></div>
+      <div class="corner bl"></div><div class="corner br"></div>
+      <div class="scan-line"></div>
+    </div>
+  </div>
+</div>
+
+<div class="status-pill" id="status-pill">Tap Start to open camera</div>
+
+<div class="btn-row">
+  <button class="btn btn-green" id="start-btn" onclick="startCamera()">▶ Start Camera</button>
+  <button class="btn btn-red"   id="stop-btn"  onclick="stopCamera()" style="display:none">⏹ Stop</button>
+</div>
+
+<div class="result-card" id="scan-result"></div>
+
+<div class="divider">MANUAL ENTRY</div>
+
+<div class="manual-wrap">
+  <input class="manual-input" type="text" id="manual-input"
+         placeholder="Admission No"
+         autocomplete="off" autocorrect="off" autocapitalize="off"
+         onkeydown="if(event.key==='Enter') submitManual()">
+  <button class="btn btn-green btn-full" onclick="submitManual()">✅ Mark Distributed</button>
+  <div class="result-card" id="manual-result" style="margin: 10px 0 0;"></div>
+</div>
+
+<div class="history">
+  <div class="hist-title">SESSION HISTORY</div>
+  <div id="hist-list"><div style="color:#334155;text-align:center;padding:16px;font-size:13px">No scans yet</div></div>
+</div>
+
+<!-- ZXing browser barcode library -->
+<script src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js"></script>
+<script>
+// ════════════════════════════════════════════
+// 🔧 CHANGE THIS to your Apps Script Web App URL
+const APPS_SCRIPT_URL = 'YOUR_APPS_SCRIPT_URL_HERE';
+// ════════════════════════════════════════════
+
+const hints = new Map();
+hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+const codeReader = new ZXing.BrowserMultiFormatReader(hints);
+
+let streaming = false;
+let cooldown  = false;
+const history = [];
+
+// ── Camera ───────────────────────────────────────────────────
+async function startCamera() {
+  const pill = document.getElementById('status-pill');
+  pill.textContent = '⏳ Starting camera...';
+  pill.className = 'status-pill';
+
+  try {
+    const devices = await codeReader.listVideoInputDevices();
+    // Prefer back camera
+    const back = devices.find(d => /back|rear|environment/i.test(d.label)) || devices[devices.length - 1];
+
+    await codeReader.decodeFromVideoDevice(back?.deviceId, 'preview', (result, err) => {
+      if (result && !cooldown) {
+        cooldown = true;
+        const code = result.getText();
+        if (navigator.vibrate) navigator.vibrate(80);
+        pill.textContent = '✅ Scanned: ' + code;
+        pill.className = 'status-pill scanning';
+        processAdmission(code, 'scan-result');
+        setTimeout(() => {
+          cooldown = false;
+          pill.textContent = '🔍 Ready — point at next barcode';
+          pill.className = 'status-pill scanning';
+        }, 3000);
+      }
+    });
+
+    streaming = true;
+    document.getElementById('overlay').style.display = 'block';
+    document.getElementById('start-btn').style.display = 'none';
+    document.getElementById('stop-btn').style.display  = 'block';
+    pill.textContent = '🔍 Scanning — point at barcode';
+    pill.className = 'status-pill scanning';
+
+  } catch(e) {
+    pill.textContent = '❌ Camera error — allow camera permission';
+    pill.className = 'status-pill error';
+    console.error(e);
+  }
+}
+
+function stopCamera() {
+  codeReader.reset();
+  streaming = false;
+  document.getElementById('overlay').style.display = 'none';
+  document.getElementById('start-btn').style.display = 'block';
+  document.getElementById('stop-btn').style.display  = 'none';
+  const pill = document.getElementById('status-pill');
+  pill.textContent = 'Tap Start to open camera';
+  pill.className = 'status-pill';
+}
+
+// ── Manual entry ─────────────────────────────────────────────
+function submitManual() {
+  const inp = document.getElementById('manual-input');
+  const val = inp.value.trim();
+  if (!val) {
+    inp.classList.add('shake');
+    setTimeout(() => inp.classList.remove('shake'), 500);
+    return;
+  }
+  processAdmission(val, 'manual-result');
+  inp.value = '';
+}
+
+// ── Call Apps Script via fetch ────────────────────────────────
+function processAdmission(admNo, resultId) {
+  const el = document.getElementById(resultId);
+  el.className = 'result-card loading';
+  el.textContent = '⏳ Updating sheet...';
+
+  const url = `${APPS_SCRIPT_URL}?action=mark&admNo=${encodeURIComponent(admNo)}`;
+  
+  fetch(url)
+    .then(r => r.json())
+    .then(data => showResult(data, admNo, resultId))
+    .catch(err => {
+      el.className = 'result-card notfound';
+      el.textContent = '❌ Network error. Check connection.';
+      addHistory(admNo, '', 'err');
+    });
+}
+
+function showResult(r, admNo, resultId) {
+  const el = document.getElementById(resultId);
+  if (r.status === 'success') {
+    el.className = 'result-card success';
+    el.innerHTML  = `✅ <b>${r.name || admNo}</b><br>Uniform Distributed! 🎽`;
+    addHistory(admNo, r.name, 'ok');
+    loadStats();
+    if (navigator.vibrate) navigator.vibrate([80,40,80]);
+  } else if (r.status === 'already') {
+    el.className = 'result-card already';
+    el.innerHTML  = `⚠️ <b>${r.name || admNo}</b><br>Already collected before!`;
+    addHistory(admNo, r.name, 'dup');
+    if (navigator.vibrate) navigator.vibrate(400);
+  } else {
+    el.className = 'result-card notfound';
+    el.innerHTML  = `❌ Admission No <b>${admNo}</b> not found!`;
+    addHistory(admNo, '', 'err');
+    if (navigator.vibrate) navigator.vibrate([200,100,200]);
+  }
+  setTimeout(() => { el.style.display='none'; el.className='result-card'; }, 5000);
+}
+
+// ── History ───────────────────────────────────────────────────
+function addHistory(admNo, name, type) {
+  history.unshift({ admNo, name: name||'', type, time: new Date().toLocaleTimeString('en-IN') });
+  const map = { ok:['b-ok','✅ Done'], dup:['b-dup','⚠️ Dup'], err:['b-err','❌ Err'] };
+  document.getElementById('hist-list').innerHTML = history.slice(0,20).map(h => {
+    const [cls,lbl] = map[h.type];
+    return `<div class="hist-item">
+      <div>
+        <div class="hist-adm">${h.admNo}</div>
+        <div class="hist-meta">${h.name ? h.name+' · ':''} ${h.time}</div>
+      </div>
+      <span class="badge ${cls}">${lbl}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── Stats ─────────────────────────────────────────────────────
+function loadStats() {
+  fetch(`${APPS_SCRIPT_URL}?action=stats`)
+    .then(r => r.json())
+    .then(s => {
+      document.getElementById('s-total').textContent = s.total;
+      document.getElementById('s-dist').textContent  = s.distributed;
+      document.getElementById('s-pend').textContent  = s.pending;
+    });
+}
+
+loadStats();
+</script>
+</body>
+</html>

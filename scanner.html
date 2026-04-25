@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Student ID Barcode Scanner</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+
+  .header { background: linear-gradient(135deg, #047857, #065f46); padding: 18px 20px; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+  .header h1 { font-size: 20px; font-weight: 800; letter-spacing: 0.5px; }
+  .header p  { font-size: 12px; opacity: 0.85; margin-top: 4px; }
+
+  .scanner-wrap { margin: 14px; border-radius: 20px; overflow: hidden; position: relative; background: #000; box-shadow: 0 8px 32px rgba(0,0,0,0.6); aspect-ratio: 4/3; }
+  #preview { width: 100%; height: 100%; display: block; object-fit: cover; }
+  .scan-overlay { position: absolute; inset: 0; pointer-events: none; }
+  .corner { position: absolute; width: 40px; height: 40px; border-color: #4ade80; border-style: solid; }
+  .tl { top: 12px;    left: 12px;  border-width: 3px 0 0 3px; border-radius: 6px 0 0 0; }
+  .tr { top: 12px;    right: 12px; border-width: 3px 3px 0 0; border-radius: 0 6px 0 0; }
+  .bl { bottom: 12px; left: 12px;  border-width: 0 0 3px 3px; border-radius: 0 0 0 6px; }
+  .br { bottom: 12px; right: 12px; border-width: 0 3px 3px 0; border-radius: 0 0 6px 0; }
+
+  .target-zone {
+    position: absolute;
+    left: 10%; right: 10%;
+    top: 35%; height: 30%;
+    border: 2px solid #4ade80;
+    border-radius: 8px;
+    background: rgba(74,222,128,0.08);
+  }
+  .scan-line {
+    position: absolute; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, #4ade80, transparent);
+    box-shadow: 0 0 10px #4ade80;
+    animation: scanMove 1.5s ease-in-out infinite;
+  }
+  @keyframes scanMove { 0%,100% { top: 5%; } 50% { top: 90%; } }
+  .zone-label {
+    position: absolute; bottom: -22px; left: 50%; transform: translateX(-50%);
+    font-size: 10px; color: #4ade80; white-space: nowrap; font-weight: 700;
+  }
+
+  .status-pill { margin: 0 14px; background: #1e293b; border-radius: 50px; padding: 10px 20px; text-align: center; font-size: 14px; color: #94a3b8; border: 1px solid #334155; transition: all 0.3s; }
+  .status-pill.scanning { color: #4ade80; border-color: #4ade8044; background: #14532d22; }
+  .status-pill.error    { color: #f87171; border-color: #f8717144; background: #7f1d1d22; }
+
+  .btn-row { display: flex; gap: 8px; padding: 10px 14px 0; }
+  .btn { flex: 1; padding: 14px 8px; border-radius: 12px; border: none; font-size: 15px; font-weight: 700; cursor: pointer; transition: transform 0.1s; color: #fff; }
+  .btn:active { transform: scale(0.96); }
+  .btn-green { background: #16a34a; }
+  .btn-red   { background: #dc2626; }
+  .btn-blue  { background: #1e40af; }
+
+  #torch-btn { display: none; }
+  #torch-btn.visible { display: flex; align-items: center; justify-content: center; }
+
+  .result-card {
+    margin: 14px;
+    padding: 22px 18px;
+    border-radius: 16px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    text-align: center;
+  }
+  .result-card.success { background: #14532d; border-color: #16a34a55; }
+  .result-card .lbl    { font-size: 11px; color: #94a3b8; letter-spacing: 2px; font-weight: 700; }
+  .result-card .adm    { font-size: 32px; font-weight: 900; color: #4ade80; margin-top: 8px; letter-spacing: 2px; word-break: break-all; }
+  .result-card .empty  { font-size: 14px; color: #64748b; padding: 6px 0; }
+  .copy-btn {
+    margin-top: 14px;
+    background: #1e40af;
+    color: #fff;
+    border: none;
+    padding: 10px 22px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .copy-btn:active { transform: scale(0.96); }
+
+  .divider { text-align: center; color: #334155; font-size: 11px; margin: 18px 14px 8px; font-weight: 700; letter-spacing: 2px; }
+
+  .history { padding: 0 14px 40px; }
+  .hist-item { background: #1e293b; border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #334155; }
+  .hist-adm  { font-size: 16px; font-weight: 800; color: #e2e8f0; letter-spacing: 1px; }
+  .hist-time { font-size: 11px; color: #64748b; margin-top: 3px; }
+  .empty-hist { color: #334155; text-align: center; padding: 16px; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📷 Student ID Scanner</h1>
+  <p>Sairam Vidyalaya · Scan to read Admission No</p>
+</div>
+
+<div class="scanner-wrap" id="scanner-wrap">
+  <video id="preview" autoplay muted playsinline></video>
+  <div class="scan-overlay" id="overlay" style="display:none">
+    <div class="corner tl"></div><div class="corner tr"></div>
+    <div class="corner bl"></div><div class="corner br"></div>
+    <div class="target-zone">
+      <div class="scan-line"></div>
+      <div class="zone-label">📷 AIM BARCODE HERE</div>
+    </div>
+  </div>
+</div>
+
+<div class="status-pill" id="status-pill">Tap Start Camera to begin</div>
+
+<div class="btn-row">
+  <button class="btn btn-green" id="start-btn" onclick="startCamera()">▶ Start Camera</button>
+  <button class="btn btn-red"   id="stop-btn"  onclick="stopCamera()" style="display:none">⏹ Stop</button>
+  <button class="btn btn-blue"  id="torch-btn" onclick="toggleTorch()">🔦</button>
+</div>
+
+<div class="result-card" id="result-card">
+  <div class="lbl">ADMISSION NUMBER</div>
+  <div class="adm" id="adm-display"><span class="empty">— scan a barcode —</span></div>
+  <button class="copy-btn" id="copy-btn" onclick="copyAdmission()" style="display:none">📋 Copy</button>
+</div>
+
+<div class="divider">— SCAN HISTORY —</div>
+
+<div class="history">
+  <div id="hist-list"><div class="empty-hist">No scans yet</div></div>
+</div>
+
+<script src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js"></script>
+<script>
+const hints = new Map();
+hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+  ZXing.BarcodeFormat.CODE_128,
+  ZXing.BarcodeFormat.CODE_39,
+  ZXing.BarcodeFormat.EAN_13,
+  ZXing.BarcodeFormat.EAN_8,
+  ZXing.BarcodeFormat.ITF,
+  ZXing.BarcodeFormat.PDF_417,
+  ZXing.BarcodeFormat.QR_CODE,
+  ZXing.BarcodeFormat.DATA_MATRIX,
+  ZXing.BarcodeFormat.CODABAR,
+  ZXing.BarcodeFormat.UPC_A,
+  ZXing.BarcodeFormat.UPC_E,
+]);
+hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+
+const codeReader = new ZXing.BrowserMultiFormatReader(hints, 300);
+
+let cooldown   = false;
+let torchOn    = false;
+let videoTrack = null;
+let lastAdm    = '';
+const history  = [];
+
+async function startCamera() {
+  const pill = document.getElementById('status-pill');
+  pill.textContent = '⏳ Starting camera...';
+  pill.className = 'status-pill';
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' },
+        width:  { ideal: 1920 },
+        height: { ideal: 1080 },
+        focusMode: { ideal: 'continuous' }
+      }
+    });
+
+    const video = document.getElementById('preview');
+    video.srcObject = stream;
+    videoTrack = stream.getVideoTracks()[0];
+
+    const caps = videoTrack.getCapabilities?.() || {};
+    if (caps.torch) {
+      document.getElementById('torch-btn').classList.add('visible');
+    }
+
+    await video.play();
+
+    codeReader.decodeFromStream(stream, 'preview', (result, err) => {
+      if (result && !cooldown) {
+        cooldown = true;
+        const code = result.getText().trim();
+        if (navigator.vibrate) navigator.vibrate(80);
+        showAdmission(code);
+        pill.textContent = '✅ Got: ' + code;
+        pill.className = 'status-pill scanning';
+        setTimeout(() => {
+          cooldown = false;
+          pill.textContent = '🔍 Ready — aim at next barcode';
+          pill.className = 'status-pill scanning';
+        }, 2000);
+      }
+    });
+
+    document.getElementById('overlay').style.display = 'block';
+    document.getElementById('start-btn').style.display = 'none';
+    document.getElementById('stop-btn').style.display  = 'block';
+    pill.textContent = '🔍 Aim barcode at the GREEN BOX';
+    pill.className = 'status-pill scanning';
+
+  } catch(e) {
+    pill.textContent = '❌ ' + (e.name === 'NotAllowedError' ? 'Allow camera permission first!' : 'Camera error: ' + e.message);
+    pill.className = 'status-pill error';
+  }
+}
+
+function stopCamera() {
+  codeReader.reset();
+  if (videoTrack) { videoTrack.stop(); videoTrack = null; }
+  torchOn = false;
+  document.getElementById('overlay').style.display = 'none';
+  document.getElementById('start-btn').style.display = 'block';
+  document.getElementById('stop-btn').style.display  = 'none';
+  document.getElementById('torch-btn').classList.remove('visible');
+  document.getElementById('torch-btn').textContent = '🔦';
+  const pill = document.getElementById('status-pill');
+  pill.textContent = 'Tap Start Camera to begin';
+  pill.className = 'status-pill';
+}
+
+async function toggleTorch() {
+  if (!videoTrack) return;
+  try {
+    torchOn = !torchOn;
+    await videoTrack.applyConstraints({ advanced: [{ torch: torchOn }] });
+    document.getElementById('torch-btn').textContent = torchOn ? '💡' : '🔦';
+  } catch(e) {
+    torchOn = false;
+  }
+}
+
+function showAdmission(code) {
+  lastAdm = code;
+  const card = document.getElementById('result-card');
+  const disp = document.getElementById('adm-display');
+  card.classList.add('success');
+  disp.textContent = code;
+  document.getElementById('copy-btn').style.display = 'inline-block';
+  addHistory(code);
+}
+
+function copyAdmission() {
+  if (!lastAdm) return;
+  const btn = document.getElementById('copy-btn');
+  const original = btn.textContent;
+  navigator.clipboard?.writeText(lastAdm).then(() => {
+    btn.textContent = '✅ Copied!';
+    setTimeout(() => btn.textContent = original, 1500);
+  }).catch(() => {
+    btn.textContent = '⚠️ Copy failed';
+    setTimeout(() => btn.textContent = original, 1500);
+  });
+}
+
+function addHistory(code) {
+  history.unshift({ code, time: new Date().toLocaleTimeString('en-IN') });
+  document.getElementById('hist-list').innerHTML = history.slice(0, 20).map(h => `
+    <div class="hist-item">
+      <div>
+        <div class="hist-adm">${h.code}</div>
+        <div class="hist-time">${h.time}</div>
+      </div>
+    </div>
+  `).join('');
+}
+</script>
+</body>
+</html>
